@@ -133,10 +133,416 @@ void a3rendering_render_controls(a3_DemoState const* demoState, a3_Scene_Renderi
 
 //-----------------------------------------------------------------------------
 
-void a3demo_uploadTransformStacks(
+//void a3demo_uploadTransformStacks(
+//    a3_UniformBuffer const* ubo_transform_stacks,
+//    a3_SceneModelMatrixStack const* model_matrix_stacks, a3_SceneViewerMatrixStack const* viewer_matrix_stacks,
+//    a3ui32 const max_models, a3ui32 const num_models, a3ui32 const max_viewers, a3ui32 const num_viewers);
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// COPY BELOW TO SHADER, REMOVE INCOMPATIBLE TERMS, ADD SCENE TO UBO
+////////////////////////////////////////////////////////////////////////////////
+
+typedef a3real rtReal;
+typedef struct rtScalar
+{
+    rtReal x;
+    rtReal xx;
+    rtReal _x;
+    rtReal _xx;
+} rtScalar;
+typedef a3vec4 rtVector;
+typedef a3vec4 rtPoint;
+typedef a3vec4 rtColor;
+
+
+// RAY-TRACING STUFF
+typedef struct rtShapePlane
+{
+    rtVector size_2;//width, height, pad[2]
+} rtShapePlane;
+typedef struct rtShapeBox
+{
+    rtVector bounds_2[2];//positive width/height/depth/pad, negative
+} rtShapeBox;
+typedef struct rtShapeSphere
+{
+    rtScalar radius;
+} rtShapeSphere;
+typedef struct rtMaterialDefault
+{
+    rtColor albedo;
+    rtColor emissive;
+} rtMaterialDefault;
+typedef struct rtObject
+{
+    rtPoint center;
+    rtVector normal;
+    rtVector tangent;
+    rtVector bitangent;
+
+    int type_shape;
+    int idx_shape;
+    int type_mat;
+    int idx_mat;
+} rtObject;
+
+#define NUM_SHAPE_TYPES                          5 
+    #define IDX_SHAPE_TYPE_PLANE_INFINITE            0
+        #define NUM_SHAPE_PLANE_INFINITE                 0
+    #define IDX_SHAPE_TYPE_PLANE_FINITE              1   
+        #define NUM_SHAPE_PLANE_FINITE                   1
+            #define IDX_SHAPE_PLANE_FINITE_GROUND            0
+    #define IDX_SHAPE_TYPE_BOX                       2       
+        #define NUM_SHAPE_BOX                            2   
+            #define IDX_SHAPE_BOX_OBJ0                       0
+            #define IDX_SHAPE_BOX_OBJ1                       1
+    #define IDX_SHAPE_TYPE_BOX_INVERTED              3       
+        #define NUM_SHAPE_BOX_INVERTED                   1   
+            #define IDX_SHAPE_BOX_INVERTED_ROOM              0
+    #define IDX_SHAPE_TYPE_SPHERE                    4       
+        #define NUM_SHAPE_SPHERE                         3   
+            #define IDX_SHAPE_SPHERE_OBJ0                    0
+            #define IDX_SHAPE_SPHERE_OBJ1                    1
+            #define IDX_SHAPE_SPHERE_LIGHTBULB               2
+                                                         
+#define NUM_MATERIAL_TYPES                       1       
+    #define IDX_MATERIAL_TYPE_DEFAULT                0   
+        #define NUM_MATERIAL_DEFAULT                     8
+            #define IDX_MATERIAL_DEFAULT_RED                 0
+            #define IDX_MATERIAL_DEFAULT_YELLOW              1
+            #define IDX_MATERIAL_DEFAULT_GREEN               2
+            #define IDX_MATERIAL_DEFAULT_CYAN                3
+            #define IDX_MATERIAL_DEFAULT_BLUE                4
+            #define IDX_MATERIAL_DEFAULT_MAGENTA             5
+            #define IDX_MATERIAL_DEFAULT_WHITE_EMIT          6
+            #define IDX_MATERIAL_DEFAULT_GRAY_EMIT           7
+
+#define UID_OBJECT_BOX0      0
+#define UID_OBJECT_BOX1      1
+#define UID_OBJECT_SPHERE0   2
+#define UID_OBJECT_SPHERE1   3
+#define UID_OBJECT_LIGHTBULB 4
+#define UID_OBJECT_GROUND    5
+#define UID_OBJECT_ROOM      6
+#define NUM_OBJECT           7
+
+#define NUM_OBJECT_PLANE_INFINITE 0
+#define NUM_OBJECT_PLANE_FINITE   1
+#define NUM_OBJECT_BOX            2
+#define NUM_OBJECT_BOX_INVERTED   1
+#define NUM_OBJECT_SPHERE         3
+
+#define IDX_MODEL_BOX0			0
+#define IDX_MODEL_BOX1			1
+#define IDX_MODEL_SPHERE0		2
+#define IDX_MODEL_SPHERE1		3
+#define IDX_MODEL_LIGHT_SPHERE	4
+#define IDX_MODEL_ROOM_BOX		5
+
+typedef struct rtMaterialRegistry
+{
+    rtMaterialDefault mat_default[NUM_MATERIAL_DEFAULT];
+} rtMaterialRegistry;
+typedef struct rtShapeRegistry
+{
+    //rtShapePlane  plane_infinite[NUM_SHAPE_PLANE_INFINITE];
+    rtShapePlane  plane_finite[NUM_SHAPE_PLANE_FINITE];
+    rtShapeBox    box[NUM_SHAPE_BOX];
+    rtShapeBox    box_inverted[NUM_SHAPE_BOX_INVERTED];
+    rtShapeSphere sphere[NUM_SHAPE_SPHERE];
+} rtShapeRegistry;
+typedef struct rtObjectRegistry
+{
+    rtObject obj[NUM_OBJECT];
+
+    //int obj_plane_infinite[NUM_OBJECT_PLANE_INFINITE];
+    int obj_plane_finite[NUM_OBJECT_PLANE_FINITE];
+    int obj_box[NUM_OBJECT_BOX];
+    int obj_box_inverted[NUM_OBJECT_BOX_INVERTED];
+    int obj_sphere[NUM_OBJECT_SPHERE];
+} rtObjectRegistry;
+typedef struct rtScene
+{
+    rtMaterialRegistry mat_registry;
+    rtShapeRegistry    shape_registry;
+    rtObjectRegistry   obj_registry;
+} rtScene;
+
+////////////////////////////////////////////////////////////////////////////////
+/// STOP HERE
+////////////////////////////////////////////////////////////////////////////////
+
+
+void rtScalarInit(rtScalar* const scalar, a3real const x)
+{
+    scalar->x  = x;
+    scalar->xx = x * x;
+    if (scalar->xx >= a3real_epsilon)
+    {
+        scalar->_x  = a3recip(scalar->x);
+        scalar->_xx = a3recip(scalar->xx);
+    }
+    else
+    {
+        scalar->_x  = a3real_zero;
+        scalar->_xx = a3real_zero;
+    }
+}
+
+
+// Breadth-first traversal hierarchy.
+// Number of nodes: N = (k^(h+1))/(k-1) when k>1, otherwise (h+1)
+//  k = number of children per node
+//  h = tree height (distance from leaf to root)
+// Keep it constant for optimization!
+#define NUM_RAY_LAYERS_BIN_EXP     1//2//1 //< power of 2 for number of layers
+#define NUM_RAY_BOUNCE_BIN_EXP     1//2//3 //< power of 2 for number of children
+#define NUM_RAY_BOUNCE_TREE_DEPTH ((1<<NUM_RAY_LAYERS_BIN_EXP)-1)
+#define NUM_RAY_BOUNCES_PER_LAYER ((1<<NUM_RAY_BOUNCE_BIN_EXP))
+#define NUM_ENTRIES ((NUM_RAY_BOUNCES_PER_LAYER > 1) ? (((1<<(NUM_RAY_BOUNCE_BIN_EXP*(NUM_RAY_BOUNCE_TREE_DEPTH+1)))-1)/(NUM_RAY_BOUNCES_PER_LAYER-1)) : (NUM_RAY_BOUNCE_TREE_DEPTH+1))
+static int rtHierarchy[NUM_ENTRIES];
+static a3boolean rtBuildHierarchy(void)
+{
+    int num_entries = 0;
+    int idx_entry = 0;
+    int idx_parent_entry = -1;
+
+    int num_clusters_this_layer = 1;
+    int idx_layer;
+    int idx_cluster_this_layer;
+    int idx_entry_this_cluster;
+
+    // Fixed root.
+    rtHierarchy[idx_entry++] = idx_parent_entry;
+
+    // Same as incrementing parent index every k iterations.
+    // Add counter for validation.
+    num_entries += num_clusters_this_layer;
+    for (idx_layer = 0; idx_layer < NUM_RAY_BOUNCE_TREE_DEPTH; ++idx_layer)
+    {
+        for (idx_cluster_this_layer = 0; idx_cluster_this_layer < num_clusters_this_layer; ++idx_cluster_this_layer)
+        {
+            ++idx_parent_entry;
+            for (idx_entry_this_cluster = 0; idx_entry_this_cluster < NUM_RAY_BOUNCES_PER_LAYER; ++idx_entry_this_cluster)
+            {
+                rtHierarchy[idx_entry++] = idx_parent_entry;
+            }
+        }
+        num_clusters_this_layer *= NUM_RAY_BOUNCES_PER_LAYER;
+        num_entries += num_clusters_this_layer;
+    }
+    if (idx_entry != NUM_ENTRIES)
+        return a3false;
+    if (num_entries != NUM_ENTRIES)
+        return a3false;
+    return a3true;
+}
+
+
+static a3ui8 transform_stack_buffer[1<<16];
+static void a3demo_uploadTransformStacks(
     a3_UniformBuffer const* ubo_transform_stacks,
-    a3_SceneModelMatrixStack const* model_matrix_stacks, a3_SceneViewerMatrixStack const* viewer_matrix_stacks,
-    a3ui32 const max_models, a3ui32 const num_models, a3ui32 const max_viewers, a3ui32 const num_viewers);
+    a3_SceneModelMatrixStack const* model_matrix_stacks, a3ui32 const num_models,
+    a3_SceneViewerMatrixStack const* viewer_matrix_stacks, a3ui32 const num_viewers,
+    rtScene const* scene_raytracing
+)
+{
+    a3ui32 const viewers_size = num_viewers * sizeof(a3_SceneViewerMatrixStack);
+    a3ui32 const models_size = num_models * sizeof(a3_SceneModelMatrixStack);
+    a3ui32 const scene_size = 1 * sizeof(rtScene);
+    a3ui32 const hierarchy_size = sizeof(rtHierarchy);
+    a3ui32 written = 0;
+    memcpy(&transform_stack_buffer[written], viewer_matrix_stacks, viewers_size);
+    written += viewers_size;
+    memcpy(&transform_stack_buffer[written], model_matrix_stacks, models_size);
+    written += models_size;
+    memcpy(&transform_stack_buffer[written], scene_raytracing, scene_size);
+    written += scene_size;
+    memcpy(&transform_stack_buffer[written], rtHierarchy, hierarchy_size);
+    written += hierarchy_size;
+    a3bufferFixedRefill(ubo_transform_stacks, 0, written, transform_stack_buffer);
+}
+
+
+void rtBuildScene(rtScene* const scene, a3_SceneObject const* const scene_object_base, a3_SceneModelMatrixStack const* const scene_model)
+{
+    rtVector tmp = a3vec4_zero;
+
+    int num_objects_plane_finite = 0;
+    int num_objects_box          = 0;
+    int num_objects_box_inverted = 0;
+    int num_objects_sphere       = 0;
+
+    // Clear.
+    memset(scene, 0x00, sizeof(rtScene));
+    
+    // Materials:
+    rtMaterialDefault* const material_default_red        = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_RED];
+    rtMaterialDefault* const material_default_yellow     = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_YELLOW];
+    rtMaterialDefault* const material_default_green      = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_GREEN];
+    rtMaterialDefault* const material_default_cyan       = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_CYAN];
+    rtMaterialDefault* const material_default_blue       = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_BLUE];
+    rtMaterialDefault* const material_default_magenta    = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_MAGENTA];
+    rtMaterialDefault* const material_default_white_emit = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_WHITE_EMIT];
+    rtMaterialDefault* const material_default_gray_emit  = &scene->mat_registry.mat_default[IDX_MATERIAL_DEFAULT_GRAY_EMIT];
+    a3real4Set(material_default_red->albedo.v, 1, 0, 0, 1);
+    a3real4Set(material_default_yellow->albedo.v, 1, 1, 0, 1);
+    a3real4Set(material_default_green->albedo.v, 0, 1, 0, 1);
+    a3real4Set(material_default_cyan->albedo.v, 0, 1, 1, 1);
+    a3real4Set(material_default_blue->albedo.v, 0, 0, 1, 1);
+    a3real4Set(material_default_magenta->albedo.v, 1, 0, 1, 1);
+    a3real4Set(material_default_white_emit->emissive.v, 1.0F, 1.0F, 1.0F, 1);
+    a3real4Set(material_default_gray_emit->emissive.v, 0.5F, 0.5F, 0.5F, 1);
+
+    // Room box shape:
+    rtShapeBox* const box_inverted_room = &scene->shape_registry.box_inverted[IDX_SHAPE_BOX_INVERTED_ROOM];
+    rtReal const room_size_2 = 0.5F * scene_object_base[IDX_MODEL_ROOM_BOX].scale.x;
+    box_inverted_room->bounds_2[0].x = +room_size_2;
+    box_inverted_room->bounds_2[0].y = +room_size_2;
+    box_inverted_room->bounds_2[0].z = +room_size_2;
+    box_inverted_room->bounds_2[0].w = 0.0F;
+    box_inverted_room->bounds_2[1].x = -room_size_2;
+    box_inverted_room->bounds_2[1].y = -room_size_2;
+    box_inverted_room->bounds_2[1].z = -room_size_2;
+    box_inverted_room->bounds_2[1].w = 0.0F;
+
+    // Room box object: 
+    rtObject* const obj_room = &scene->obj_registry.obj[UID_OBJECT_ROOM];
+    a3mat4 const* const transform_room = &scene_model[IDX_MODEL_ROOM_BOX].modelViewMat;
+    a3real const room_shift_z = -0.05F;
+    scene->obj_registry.obj_box_inverted[num_objects_box_inverted++] = UID_OBJECT_ROOM;
+    a3real4GetUnit(obj_room->normal.v, transform_room->v2.v);
+    a3real4GetUnit(obj_room->tangent.v, transform_room->v0.v);
+    a3real4GetUnit(obj_room->bitangent.v, transform_room->v1.v);
+    a3real4Sum(obj_room->center.v, transform_room->v3.v, a3real4ProductS(tmp.v, obj_room->normal.v, room_shift_z));//< Shift down slightly
+    obj_room->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_room->idx_mat    = IDX_MATERIAL_DEFAULT_GREEN;
+    obj_room->type_shape = IDX_SHAPE_TYPE_BOX_INVERTED;
+    obj_room->idx_shape  = IDX_SHAPE_BOX_INVERTED_ROOM;
+
+    // Ground plane shape:
+    rtShapePlane* const plane_finite_ground = &scene->shape_registry.plane_finite[IDX_SHAPE_PLANE_FINITE_GROUND];
+    plane_finite_ground->size_2.x = room_size_2;
+    plane_finite_ground->size_2.y = room_size_2;
+    plane_finite_ground->size_2.z = 0.0F;
+    plane_finite_ground->size_2.w = 0.0F;
+
+    // Ground plane object:
+    rtObject* const obj_ground = &scene->obj_registry.obj[UID_OBJECT_GROUND];
+    a3real const ground_shift_z = -room_size_2 - room_shift_z;
+    scene->obj_registry.obj_plane_finite[num_objects_plane_finite++] = UID_OBJECT_GROUND;
+    obj_ground->normal    = obj_room->normal;
+    obj_ground->tangent   = obj_room->tangent;
+    obj_ground->bitangent = obj_room->bitangent;
+    a3real4Sum(obj_ground->center.v, transform_room->v3.v, a3real4ProductS(tmp.v, obj_room->normal.v, ground_shift_z));//< Shift down to floor
+    obj_ground->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_ground->idx_mat    = IDX_MATERIAL_DEFAULT_MAGENTA;
+    obj_ground->type_shape = IDX_SHAPE_TYPE_PLANE_FINITE;
+    obj_ground->idx_shape  = IDX_SHAPE_PLANE_FINITE_GROUND;
+
+    // Lightbulb shape:
+    rtShapeSphere* const sphere_lightbulb = &scene->shape_registry.sphere[IDX_SHAPE_SPHERE_LIGHTBULB];
+    a3real const lightbulb_size = scene_object_base[IDX_MODEL_LIGHT_SPHERE].scale.x;
+    rtScalarInit(&sphere_lightbulb->radius, lightbulb_size);
+
+    // Lightbulb object:
+    rtObject* const obj_lightbulb = &scene->obj_registry.obj[UID_OBJECT_LIGHTBULB];
+    a3mat4 const* const transform_lightbulb = &scene_model[IDX_MODEL_LIGHT_SPHERE].modelViewMat;
+    a3real const lightbulb_shift_z = -lightbulb_size + room_shift_z;
+    scene->obj_registry.obj_sphere[num_objects_sphere++] = UID_OBJECT_LIGHTBULB;
+    a3real4GetUnit(obj_lightbulb->normal.v, transform_lightbulb->v2.v);
+    a3real4GetUnit(obj_lightbulb->tangent.v, transform_lightbulb->v0.v);
+    a3real4GetUnit(obj_lightbulb->bitangent.v, transform_lightbulb->v1.v);
+    a3real4Sum(obj_lightbulb->center.v, transform_lightbulb->v3.v, a3real4ProductS(tmp.v, obj_room->normal.v, lightbulb_shift_z));//< Shift down slightly
+    obj_lightbulb->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_lightbulb->idx_mat    = IDX_MATERIAL_DEFAULT_WHITE_EMIT;
+    obj_lightbulb->type_shape = IDX_SHAPE_TYPE_SPHERE;
+    obj_lightbulb->idx_shape  = IDX_SHAPE_SPHERE_LIGHTBULB;
+
+    // Sphere shapes:
+    rtShapeSphere* const sphere_obj0 = &scene->shape_registry.sphere[IDX_SHAPE_SPHERE_OBJ0];
+    a3real const sphere0_size = scene_object_base[IDX_MODEL_SPHERE0].scale.x;
+    rtScalarInit(&sphere_obj0->radius, sphere0_size);
+
+    rtShapeSphere* const sphere_obj1 = &scene->shape_registry.sphere[IDX_SHAPE_SPHERE_OBJ1];
+    a3real const sphere1_size = scene_object_base[IDX_MODEL_SPHERE1].scale.x;
+    rtScalarInit(&sphere_obj1->radius, sphere1_size);
+
+    // Sphere objects:
+    rtObject* const obj_sphere0 = &scene->obj_registry.obj[UID_OBJECT_SPHERE0];
+    a3mat4 const* const transform_sphere0 = &scene_model[IDX_MODEL_SPHERE0].modelViewMat;
+    scene->obj_registry.obj_sphere[num_objects_sphere++] = UID_OBJECT_SPHERE0;
+    obj_sphere0->center = transform_sphere0->v3;//< Center
+    a3real4GetUnit(obj_sphere0->normal.v, transform_sphere0->v2.v);
+    a3real4GetUnit(obj_sphere0->tangent.v, transform_sphere0->v0.v);
+    a3real4GetUnit(obj_sphere0->bitangent.v, transform_sphere0->v1.v);
+    obj_sphere0->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_sphere0->idx_mat    = IDX_MATERIAL_DEFAULT_RED;
+    obj_sphere0->type_shape = IDX_SHAPE_TYPE_SPHERE;
+    obj_sphere0->idx_shape  = IDX_SHAPE_SPHERE_OBJ0;
+
+    rtObject* const obj_sphere1 = &scene->obj_registry.obj[UID_OBJECT_SPHERE1];
+    a3mat4 const* const transform_sphere1 = &scene_model[IDX_MODEL_SPHERE1].modelViewMat;
+    scene->obj_registry.obj_sphere[num_objects_sphere++] = UID_OBJECT_SPHERE1;
+    obj_sphere1->center = transform_sphere1->v3;//< Center
+    a3real4GetUnit(obj_sphere1->normal.v, transform_sphere1->v2.v);
+    a3real4GetUnit(obj_sphere1->tangent.v, transform_sphere1->v0.v);
+    a3real4GetUnit(obj_sphere1->bitangent.v, transform_sphere1->v1.v);
+    obj_sphere1->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_sphere1->idx_mat    = IDX_MATERIAL_DEFAULT_YELLOW;
+    obj_sphere1->type_shape = IDX_SHAPE_TYPE_SPHERE;
+    obj_sphere1->idx_shape  = IDX_SHAPE_SPHERE_OBJ1;
+
+    // Box shapes:
+    rtShapeBox* const box_obj0 = &scene->shape_registry.box[IDX_SHAPE_BOX_OBJ0];
+    a3real const box0_size_2 = 0.5F * scene_object_base[IDX_MODEL_BOX0].scale.x;
+    box_obj0->bounds_2[0].x = +box0_size_2;
+    box_obj0->bounds_2[0].y = +box0_size_2;
+    box_obj0->bounds_2[0].z = +box0_size_2;
+    box_obj0->bounds_2[0].w = 0.0F;
+    box_obj0->bounds_2[1].x = -box0_size_2;
+    box_obj0->bounds_2[1].y = -box0_size_2;
+    box_obj0->bounds_2[1].z = -box0_size_2;
+    box_obj0->bounds_2[1].w = 0.0F;
+
+    rtShapeBox* const box_obj1 = &scene->shape_registry.box[IDX_SHAPE_BOX_OBJ1];
+    a3real const box1_size_2 = 0.5F * scene_object_base[IDX_MODEL_BOX1].scale.x;
+    box_obj1->bounds_2[0].x = +box1_size_2;
+    box_obj1->bounds_2[0].y = +box1_size_2;
+    box_obj1->bounds_2[0].z = +box1_size_2;
+    box_obj1->bounds_2[0].w = 0.0F;
+    box_obj1->bounds_2[1].x = -box1_size_2;
+    box_obj1->bounds_2[1].y = -box1_size_2;
+    box_obj1->bounds_2[1].z = -box1_size_2;
+    box_obj1->bounds_2[1].w = 0.0F;
+
+    // Box objects:
+    rtObject* const obj_box0 = &scene->obj_registry.obj[UID_OBJECT_BOX0];
+    a3mat4 const* const transform_box0 = &scene_model[IDX_MODEL_BOX0].modelViewMat;
+    scene->obj_registry.obj_box[num_objects_box++] = UID_OBJECT_BOX0;
+    obj_box0->center = transform_box0->v3;//< Center
+    a3real4GetUnit(obj_box0->normal.v, transform_box0->v2.v);
+    a3real4GetUnit(obj_box0->tangent.v, transform_box0->v0.v);
+    a3real4GetUnit(obj_box0->bitangent.v, transform_box0->v1.v);
+    obj_box0->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_box0->idx_mat    = IDX_MATERIAL_DEFAULT_CYAN;
+    obj_box0->type_shape = IDX_SHAPE_TYPE_BOX;
+    obj_box0->idx_shape  = IDX_SHAPE_BOX_OBJ0;
+
+    rtObject* const obj_box1 = &scene->obj_registry.obj[UID_OBJECT_BOX1];
+    a3mat4 const* const transform_box1 = &scene_model[IDX_MODEL_BOX1].modelViewMat;
+    scene->obj_registry.obj_box[num_objects_box++] = UID_OBJECT_BOX1;
+    obj_box1->center = transform_box1->v3;//< Center
+    a3real4GetUnit(obj_box1->normal.v, transform_box1->v2.v);
+    a3real4GetUnit(obj_box1->tangent.v, transform_box1->v0.v);
+    a3real4GetUnit(obj_box1->bitangent.v, transform_box1->v1.v);
+    obj_box1->type_mat   = IDX_MATERIAL_TYPE_DEFAULT;
+    obj_box1->idx_mat    = IDX_MATERIAL_DEFAULT_BLUE;
+    obj_box1->type_shape = IDX_SHAPE_TYPE_BOX;
+    obj_box1->idx_shape  = IDX_SHAPE_BOX_OBJ1;
+}
+
 
 // sub-routine for rendering the demo state using the shading pipeline
 void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const* scene, a3f64 const dt)
@@ -312,6 +718,14 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 	a3mat4 modelMat, modelViewMat, modelViewProjectionMat;
     a3vec4 pixelSizeAndInv;
 
+    a3_SceneObject const* const scene_object_base = scene->obj_room_box;
+    a3_SceneModelMatrixStack  const* const room_model_base  = &scene->modelMatrixStack[scene_object_base - scene->object_scene];
+    a3_SceneViewerMatrixStack const* const room_viewer_base = &scene->viewerMatrixStack[scene->proj_camera_main - scene->projector];
+
+    // RAY-TRACING SCENE
+    rtScene scene_raytracing;
+    rtBuildScene(&scene_raytracing, scene_object_base, room_model_base);
+
 	// init
 	a3real4x4Product(viewProjectionMat.m, projectionMat.m, viewMat.m);
 	a3real4x4Product(projectionBiasMat.m, bias.m, projectionMat.m);
@@ -452,30 +866,35 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
                 }
 			}
 			break;
-		case rendering_renderRT:
+        case rendering_renderRT: {
+            rtBuildHierarchy();
             a3demo_uploadTransformStacks(demoState->ubo_transformStack,
-                &scene->modelMatrixStack[scene->obj_room_box - scene->object_scene],
-                &scene->viewerMatrixStack[scene->proj_camera_main - scene->projector],
-                renderingMaxCount_sceneObject, (a3ui32)(scene->obj_room_enclosure - scene->obj_room),
-                renderingMaxCount_projector, 1);
+                room_model_base, (a3ui32)(scene->obj_room_enclosure - scene->obj_room),
+                room_viewer_base, 1,
+                &scene_raytracing);
             a3shaderUniformBufferActivate(demoState->ubo_transformStack, 0);
-			for (currentSceneObject = scene->obj_room_enclosure, endSceneObject = scene->obj_room_enclosure,
-				j = (a3ui32)(currentSceneObject - scene->object_scene);
-				currentSceneObject <= endSceneObject;
-				++j, ++currentSceneObject)
-			{
-				// send data and draw
-				i = (j * 2 + 11) % hueCount;
-				currentDrawable = drawable[currentSceneObject - scene->obj_world_root];
-				a3textureActivate(texture_dm[j], a3tex_unit00);
-				a3textureActivate(texture_dm[j], a3tex_unit01);
-				a3real4x4Product(modelViewMat.m, activeCameraObject->modelMatInv.m, currentSceneObject->modelMat.m);
-				a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uMV, 1, modelViewMat.mm);
-				a3scene_quickInvertTranspose_internal(modelViewMat.m);
-				modelViewMat.v3 = a3vec4_zero;
-				a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uMV_nrm, 1, modelViewMat.mm);
-				a3shaderUniformSendFloat(a3unif_vec4, currentDemoProgram->uColor, 1, rgba4[i].v);
-				a3shaderUniformSendInt(a3unif_single, currentDemoProgram->uIndex, 1, &j);
+            for (currentSceneObject = scene->obj_room_enclosure, endSceneObject = scene->obj_room_enclosure,
+                j = (a3ui32)(currentSceneObject - scene->object_scene);
+                currentSceneObject <= endSceneObject;
+                ++j, ++currentSceneObject)
+            {
+                a3mat4 modelViewMat_tmp;
+                a3mat4 modelViewMat_scale;
+                a3real4x4SetScale(modelViewMat_scale.m, 1.05F);
+
+                // send data and draw
+                i = (j * 2 + 11) % hueCount;
+                currentDrawable = drawable[currentSceneObject - scene->obj_world_root];
+                a3textureActivate(texture_dm[j], a3tex_unit00);
+                a3textureActivate(texture_dm[j], a3tex_unit01);
+                a3real4x4Product(modelViewMat_tmp.m, activeCameraObject->modelMatInv.m, currentSceneObject->modelMat.m);
+                a3real4x4Product(modelViewMat.m, modelViewMat_tmp.m, modelViewMat_scale.m);
+                a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uMV, 1, modelViewMat.mm);
+                a3scene_quickInvertTranspose_internal(modelViewMat.m);
+                modelViewMat.v3 = a3vec4_zero;
+                a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uMV_nrm, 1, modelViewMat.mm);
+                a3shaderUniformSendFloat(a3unif_vec4, currentDemoProgram->uColor, 1, rgba4[i].v);
+                a3shaderUniformSendInt(a3unif_single, currentDemoProgram->uIndex, 1, &j);
                 if (invert_model[j])
                 {
                     glCullFace(GL_FRONT);
@@ -486,8 +905,8 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
                 {
                     a3vertexDrawableActivateAndRender(currentDrawable);
                 }
-			}
-			break;
+            }
+        }	break;
 		}
 	}	break;
 		// end forward scene pass

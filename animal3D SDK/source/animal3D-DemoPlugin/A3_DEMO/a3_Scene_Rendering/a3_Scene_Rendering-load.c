@@ -240,7 +240,7 @@ void a3rendering_load(a3_DemoState const* demoState, a3_Scene_Rendering* scene)
 
 
 	// set flags
-	scene->render = rendering_renderTexture;
+	scene->render = rendering_renderRT;
 	scene->display = rendering_displayTexture;
 	scene->activeCamera = rendering_cameraSceneViewer;
 

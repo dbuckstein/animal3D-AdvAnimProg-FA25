@@ -83,8 +83,6 @@ void a3rendering_update_sceneGraph(a3_Scene_Rendering* scene, a3f64 const dt)
 void a3rendering_update(a3_DemoState* demoState, a3_Scene_Rendering* scene, a3f64 const dt)
 {
 	a3ui32 i;
-	a3boolean const updateIK = true;
-	a3boolean const updateBlendTreeFK = true;
 
 	// active camera
 	a3_SceneProjector const* activeCamera = scene->projector + scene->activeCamera;
