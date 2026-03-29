@@ -53,6 +53,8 @@ extern "C"
 				// common vertex shader uniform handles
 				uMVP,						// model-view-projection transform (object -> clip)
 				uMV,						// model-view matrix (object -> view)
+                uV_post,                    // post-view matrix (view -> view')
+                uV_post_inv,                // post-view matrix inverse (view' -> view)
 				uP,							// projection matrix (view -> clip)
 				uP_inv,						// projection matrix inverse (clip -> view)
 				uPB,						// projection-bias matrix (view -> biased clip)

@@ -63,7 +63,8 @@ extern "C"
 		rendering_renderTexture,		// textured
 		rendering_renderLambert,		// Lambert shading model
 		rendering_renderPhong,			// Phong shading model
-        rendering_renderRT,             // ray-tracing
+        //rendering_renderRT,             // ray-tracing
+        rendering_renderPhongStereo,    // Phong shading model stereoscopic
 
 		rendering_render_max
 	} a3_Scene_Rendering_RenderProgramName;
@@ -72,6 +73,7 @@ extern "C"
 	typedef enum a3_Scene_Rendering_DisplayProgramName
 	{
 		rendering_displayTexture,			// display simple texture
+        rendering_displayStereo,            // display texture with stereo processing
 
 		rendering_display_max
 	} a3_Scene_Rendering_DisplayProgramName;
@@ -93,10 +95,10 @@ extern "C"
 	} a3_Scene_Rendering_PipelineName;
 
 	// render passes
-	typedef enum a3_Scene_Rendering_PassName
-	{
-		rendering_passScene,				// render scene objects
-		rendering_passComposite,			// composite layers
+    typedef enum a3_Scene_Rendering_PassName
+    {
+        rendering_passScene,				// render scene objects
+        rendering_passComposite,			// composite layers
 
 		rendering_pass_max
 	} a3_Scene_Rendering_PassName;
@@ -141,12 +143,12 @@ extern "C"
 		// control modes
 		a3_Scene_Rendering_ControlTarget ctrl_target;
 
-        // test ray and hull
-        a3_Hull   test_hull;
-        a3_Ray    test_ray;
-        a3real    test_ray_param;
-        a3boolean test_ray_fired;
-        a3boolean test_ray_hit;
+        //// test ray and hull
+        //a3_Hull   test_hull;
+        //a3_Ray    test_ray;
+        //a3real    test_ray_param;
+        //a3boolean test_ray_fired;
+        //a3boolean test_ray_hit;
 
         // basic animation
         a3real rotate_time;

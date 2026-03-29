@@ -30,7 +30,9 @@ layout (location = 8)	in vec4 aTexcoord;
 uniform mat4 uMVP;
 uniform mat4 uAtlas;
 
-out vec4 vTexcoord_atlas;
+out vbVertexData {
+	vec4 vTexcoord_atlas;
+};
 
 flat out int vVertexID;
 flat out int vInstanceID;

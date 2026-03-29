@@ -539,6 +539,9 @@ void a3demo_loadShaders(a3_DemoState *demoState)
 			// 00-common
 			a3_DemoStateShader
 				drawTangentBasis_gs[1];
+            a3_DemoStateShader
+                passthru_viewport_dup_gs[1],
+                passthru_stereo_gs[1];
 
 			// fragment shaders
 			// base
@@ -546,14 +549,15 @@ void a3demo_loadShaders(a3_DemoState *demoState)
 				drawColorUnif_fs[1],
 				drawColorAttrib_fs[1];
 			// 00-common
-			a3_DemoStateShader
-				drawTexture_fs[1],
-				drawLambert_fs[1],
-				drawPhong_fs[1],
+            a3_DemoStateShader
+                drawTexture_fs[1],
+                drawLambert_fs[1],
+                drawPhong_fs[1],
                 drawPhotorealistic0_fs[1],
                 drawPhotorealistic1_fs[1],
                 drawPhotorealistic2_fs[1],
-                drawRT_fs[1];
+                drawStereoDisplay_fs[1];
+                //drawRT_fs[1];
 		};
 	} shaderList = {
 		{
@@ -585,6 +589,8 @@ void a3demo_loadShaders(a3_DemoState *demoState)
 			// 00-common
 			{ { { 0 },	"shdr-gs:draw-tb",					a3shader_geometry,	2,{ A3_DEMO_GS"00-common/drawTangentBasis_gs4x.glsl",
 																					A3_DEMO_GS"00-common/utilCommon_gs4x.glsl",} } },
+            { { { 0 },	"shdr-gs:passthru-vp-dup",			a3shader_geometry,	1,{ A3_DEMO_GS"00-common/passthru_viewport_dup_gs4x.glsl" } } },
+            { { { 0 },	"shdr-gs:passthru-stereo",			a3shader_geometry,	1,{ A3_DEMO_GS"00-common/passthru_stereo_gs4x.glsl" } } },
 
 			// fs
 			// base
@@ -599,8 +605,9 @@ void a3demo_loadShaders(a3_DemoState *demoState)
             { { { 0 },	"shdr-fs:draw-photo0",		    	a3shader_fragment,	1,{ A3_DEMO_FS"00-common/drawPhotorealistic0_fs4x.glsl",} } },
             { { { 0 },	"shdr-fs:draw-photo1",		    	a3shader_fragment,	1,{ A3_DEMO_FS"00-common/drawPhotorealistic1_fs4x.glsl",} } },
             { { { 0 },	"shdr-fs:draw-photo2",		        a3shader_fragment,	1,{ A3_DEMO_FS"00-common/drawPhotorealistic2_fs4x.glsl",} } },
-            { { { 0 },	"shdr-fs:draw-RT",		    		a3shader_fragment,	1,{ A3_DEMO_FS"00-common/drawRT_fs4x.glsl",} } },
-		}
+            { { { 0 },	"shdr-fs:draw-stereo-display",		a3shader_fragment,	1,{ A3_DEMO_FS"00-common/drawStereoDisplay_fs4x.glsl",} } },
+            //{ { { 0 },	"shdr-fs:draw-RT",		    		a3shader_fragment,	1,{ A3_DEMO_FS"00-common/drawRT_fs4x.glsl",} } },
+        }
 	};
 	a3_DemoStateShader *const shaderListPtr = (a3_DemoStateShader *)(&shaderList), *shaderPtr;
 	const a3ui32 numUniqueShaders = sizeof(shaderList) / sizeof(a3_DemoStateShader);
@@ -704,11 +711,28 @@ void a3demo_loadShaders(a3_DemoState *demoState)
     a3shaderProgramCreate(currentDemoProg->program, "prog:draw-photo2");
     a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passTangentBasis_transform_vs->shader);
     a3shaderProgramAttachShader(currentDemoProg->program, shaderList.drawPhotorealistic2_fs->shader);
-    // Ray-tracing
-    currentDemoProg = demoState->prog_drawRT;
-    a3shaderProgramCreate(currentDemoProg->program, "prog:draw-RT");
+    // texturing (stereoscopic)
+    currentDemoProg = demoState->prog_drawTextureStereo;
+    a3shaderProgramCreate(currentDemoProg->program, "prog:draw-tex-stereo");
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passTexcoord_transform_vs->shader);
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passthru_viewport_dup_gs->shader);
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.drawTexture_fs->shader);
+    // Phong (stereoscopic)
+    currentDemoProg = demoState->prog_drawPhongStereo;
+    a3shaderProgramCreate(currentDemoProg->program, "prog:draw-Phong-stereo");
     a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passTangentBasis_transform_vs->shader);
-    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.drawRT_fs->shader);
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passthru_stereo_gs->shader);
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.drawPhong_fs->shader);
+    // stereoscopic display
+    currentDemoProg = demoState->prog_drawStereoDisplay;
+    a3shaderProgramCreate(currentDemoProg->program, "prog:draw-stereo-display");
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passTexcoord_transform_vs->shader);
+    a3shaderProgramAttachShader(currentDemoProg->program, shaderList.drawStereoDisplay_fs->shader);
+    //// Ray-tracing
+    //currentDemoProg = demoState->prog_drawRT;
+    //a3shaderProgramCreate(currentDemoProg->program, "prog:draw-RT");
+    //a3shaderProgramAttachShader(currentDemoProg->program, shaderList.passTangentBasis_transform_vs->shader);
+    //a3shaderProgramAttachShader(currentDemoProg->program, shaderList.drawRT_fs->shader);
 	// Phong for 5-target morphing
 	currentDemoProg = demoState->prog_drawPhong_morph5;
 	a3shaderProgramCreate(currentDemoProg->program, "prog:draw-Phong-morph5");
@@ -808,6 +832,8 @@ void a3demo_loadShaders(a3_DemoState *demoState)
 		// common VS
 		a3demo_setUniformDefaultMat4(currentDemoProg, uMVP);
 		a3demo_setUniformDefaultMat4(currentDemoProg, uMV);
+		a3demo_setUniformDefaultMat4(currentDemoProg, uV_post);
+		a3demo_setUniformDefaultMat4(currentDemoProg, uV_post_inv);
 		a3demo_setUniformDefaultMat4(currentDemoProg, uP);
 		a3demo_setUniformDefaultMat4(currentDemoProg, uP_inv);
 		a3demo_setUniformDefaultMat4(currentDemoProg, uPB);

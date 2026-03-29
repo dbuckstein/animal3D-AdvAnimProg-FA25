@@ -269,8 +269,8 @@ typedef struct a3_DemoState
             a3_SceneShaderProgram
                 prog_drawPhotorealistic0[1],                // draw photorealistic surface
                 prog_drawPhotorealistic1[1],                // draw photorealistic surface
-                prog_drawPhotorealistic2[1],                // draw photorealistic surface
-                prog_drawRT[1];                             // draw ray-tracing surface
+                prog_drawPhotorealistic2[1];                // draw photorealistic surface
+                //prog_drawRT[1];                             // draw ray-tracing surface
             a3_SceneShaderProgram
 				prog_drawPhong_instanced[1],				// draw Phong shading model with instancing
 				prog_drawLambert_instanced[1],				// draw Lambert shading model with instancing
@@ -290,6 +290,10 @@ typedef struct a3_DemoState
 				prog_drawTangentBasis_skin[1],				// draw vertex/face tangent bases and wireframe for skinned model
 				prog_drawTangentBasis_morph5[1],			// draw vertex/face tangent bases and wireframe for 5-target morphing model
 				prog_drawTangentBasis[1];					// draw vertex/face tangent bases and wireframe
+            a3_SceneShaderProgram
+                prog_drawTextureStereo[1],                  // draw texture with stereoscopic display
+                prog_drawPhongStereo[1],                    // draw Phong shading model with stereoscopic display
+                prog_drawStereoDisplay[1];                  // draw post-processed stereoscopic display
 		};
 	};
 

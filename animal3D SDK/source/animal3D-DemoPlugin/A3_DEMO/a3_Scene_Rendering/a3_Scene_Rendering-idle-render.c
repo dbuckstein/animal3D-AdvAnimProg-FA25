@@ -63,12 +63,14 @@ void a3rendering_render_controls(a3_DemoState const* demoState, a3_Scene_Renderi
 		"Texture",
 		"Lambert shading",
 		"Phong shading",
-		"Ray-tracing",
+		//"Ray-tracing",
+        "Phong shading (stereoscopic)"
 	};
 
 	// forward display names
 	a3byte const* displayProgramName[rendering_display_max] = {
 		"Texture",
+        "Stereo"
 	};
 
 	// active camera name
@@ -123,11 +125,11 @@ void a3rendering_render_controls(a3_DemoState const* demoState, a3_Scene_Renderi
     a3textDraw(text, textAlign, textOffset += textOffsetDelta, textDepth, col.r, col.g, col.b, col.a,
         "    Active camera (%u / %u) ('c' prev | next 'v'): %s", activeCamera + 1, rendering_camera_max, cameraText[activeCamera]);
 
-    // tests
-    a3textDraw(text, textAlign, textOffset += textOffsetDelta, textDepth, col.r, col.g, col.b, col.a,
-        "    Test ray fired: %s", (scene->test_ray_fired ? "TRUE " : "FALSE"));
-    a3textDraw(text, textAlign, textOffset += textOffsetDelta, textDepth, col.r, col.g, col.b, col.a,
-        "        Hit: %s; t=%lf", (scene->test_ray_hit ? "TRUE " : "FALSE"), (a3f64)scene->test_ray_param);
+    //// tests
+    //a3textDraw(text, textAlign, textOffset += textOffsetDelta, textDepth, col.r, col.g, col.b, col.a,
+    //    "    Test ray fired: %s", (scene->test_ray_fired ? "TRUE " : "FALSE"));
+    //a3textDraw(text, textAlign, textOffset += textOffsetDelta, textDepth, col.r, col.g, col.b, col.a,
+    //    "        Hit: %s; t=%lf", (scene->test_ray_hit ? "TRUE " : "FALSE"), (a3f64)scene->test_ray_param);
 }
 
 
@@ -310,13 +312,15 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 			demoState->prog_drawTexture,
 			demoState->prog_drawLambert,
 			demoState->prog_drawPhong,
-            demoState->prog_drawRT,
-		},
+            //demoState->prog_drawRT,
+            demoState->prog_drawPhongStereo,
+        },
 	};
 
 	// display shader programs
 	const a3_SceneShaderProgram* displayProgram[rendering_display_max] = {
 		demoState->prog_drawTexture,
+        demoState->prog_drawStereoDisplay,
 	};
 
 	// framebuffers to which to write based on pipeline mode
@@ -329,7 +333,7 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 	const a3_Framebuffer* readFBO[rendering_pass_max][4] = {
 		{ 0, },
 		{ demoState->fbo_scene_c16d24s8_mrt, },
-	};
+    };
 
 	// target info
 	a3_Scene_Rendering_RenderProgramName const render = scene->render;
@@ -481,6 +485,7 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 			break;
 		case rendering_renderLambert:
 		case rendering_renderPhong:
+		case rendering_renderPhongStereo:
 			for (currentSceneObject = scene->obj_room_box, endSceneObject = scene->obj_room_enclosure,
 				j = (a3ui32)(currentSceneObject - scene->object_scene);
 				currentSceneObject <= endSceneObject;
@@ -510,7 +515,7 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
                 }
 			}
 			break;
-        case rendering_renderRT:
+        /*case rendering_renderRT:
         {
             a3demo_uploadTransformStacks(demoState->ubo_transformStack,
                 &scene->modelMatrixStack[scene->obj_room_box - scene->object_scene],
@@ -605,7 +610,7 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
                 }
             }
             break;
-        }
+        }*/
 		}
 	}	break;
 		// end forward scene pass
@@ -736,7 +741,7 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 	a3scene_enableCompositeBlending();
 
 	// scene overlays
-	if (scene->pass >= rendering_passScene)
+	if ((scene->pass >= rendering_passScene) && (scene->render != rendering_renderPhongStereo))
 	{
 		if (demoState->displayGrid || demoState->displayTangentBases || demoState->displayWireframe)
 		{
@@ -808,22 +813,22 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 		// hidden volumes
 		if (demoState->displayHiddenVolumes)
 		{
-            // ray fired
-            if (scene->test_ray_fired)
-            {
-                a3_SceneProjector const* projector = scene->projector + scene->activeCamera;
-                a3real const* const color = scene->test_ray_hit ? green : red;
-                a3real const param = scene->test_ray_hit ? scene->test_ray_param : a3real_four;
-
-                modelMat = projector->sceneObject->modelMat;
-                a3real3MulS(modelMat.v0.v, (a3real)(0.025));
-                a3real3MulS(modelMat.v1.v, (a3real)(0.025));
-                a3real3MulS(modelMat.v2.v, (a3real)(0.025));
-                a3rayComputePos(modelMat.v3.v, scene->test_ray.p_origin.v, scene->test_ray.v_direction.v, a3real_zero);
-                a3scene_drawModelSolidColor(modelViewProjectionMat.m, viewProjectionMat.m, modelMat.m, demoState->prog_drawColorUnif, demoState->draw_unit_sphere, blue);
-                a3rayComputePos(modelMat.v3.v, scene->test_ray.p_origin.v, scene->test_ray.v_direction.v, param);
-                a3scene_drawModelSolidColor(modelViewProjectionMat.m, viewProjectionMat.m, modelMat.m, demoState->prog_drawColorUnif, demoState->draw_unit_sphere, color);
-            }
+            //// ray fired
+            //if (scene->test_ray_fired)
+            //{
+            //    a3_SceneProjector const* projector = scene->projector + scene->activeCamera;
+            //    a3real const* const color = scene->test_ray_hit ? green : red;
+            //    a3real const param = scene->test_ray_hit ? scene->test_ray_param : a3real_four;
+            //
+            //    modelMat = projector->sceneObject->modelMat;
+            //    a3real3MulS(modelMat.v0.v, (a3real)(0.025));
+            //    a3real3MulS(modelMat.v1.v, (a3real)(0.025));
+            //    a3real3MulS(modelMat.v2.v, (a3real)(0.025));
+            //    a3rayComputePos(modelMat.v3.v, scene->test_ray.p_origin.v, scene->test_ray.v_direction.v, a3real_zero);
+            //    a3scene_drawModelSolidColor(modelViewProjectionMat.m, viewProjectionMat.m, modelMat.m, demoState->prog_drawColorUnif, demoState->draw_unit_sphere, blue);
+            //    a3rayComputePos(modelMat.v3.v, scene->test_ray.p_origin.v, scene->test_ray.v_direction.v, param);
+            //    a3scene_drawModelSolidColor(modelViewProjectionMat.m, viewProjectionMat.m, modelMat.m, demoState->prog_drawColorUnif, demoState->draw_unit_sphere, color);
+            //}
 		}
 
 

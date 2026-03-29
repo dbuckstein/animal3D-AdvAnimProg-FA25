@@ -71,12 +71,12 @@ void a3rendering_input_keyCharPress(a3_DemoState const* demoState, a3_Scene_Rend
 		//// toggle rotation input mode
 		//a3sceneCtrlCasesLoop(scene->ctrl_rotation, rendering_inputmode_max, '+', '_');
 
-    case '/':
-        a3rayReset(&scene->test_ray);
-        scene->test_ray_param = a3real_zero;
-        scene->test_ray_fired = a3false;
-        scene->test_ray_hit   = a3false;
-        break;
+    //case '/':
+    //    a3rayReset(&scene->test_ray);
+    //    scene->test_ray_param = a3real_zero;
+    //    scene->test_ray_fired = a3false;
+    //    scene->test_ray_hit   = a3false;
+    //    break;
 	}
 }
 

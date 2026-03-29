@@ -255,6 +255,7 @@
     <None Include="..\..\..\resource\glsl\4x\fs\00-common\drawPhotorealistic1_fs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\fs\00-common\drawPhotorealistic2_fs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\fs\00-common\drawRT_fs4x.glsl" />
+    <None Include="..\..\..\resource\glsl\4x\fs\00-common\drawStereoDisplay_fs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\fs\00-common\drawTexture_fs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\fs\00-common\utilCommon_fs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\fs\01-pipeline\drawPhong_shadow_fs4x.glsl" />
@@ -265,6 +266,7 @@
     <None Include="..\..\..\resource\glsl\4x\fs\drawColorUnif_fs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\gs\00-common\drawTangentBasis_gs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\gs\00-common\passthru_stereo_gs4x.glsl" />
+    <None Include="..\..\..\resource\glsl\4x\gs\00-common\passthru_viewport_dup_gs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\gs\00-common\utilCommon_gs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\vs\00-common\passTangentBasis_morph5_transform_instanced_vs4x.glsl" />
     <None Include="..\..\..\resource\glsl\4x\vs\00-common\passTangentBasis_morph5_transform_vs4x.glsl" />

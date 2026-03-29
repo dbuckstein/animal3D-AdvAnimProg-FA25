@@ -18,41 +18,57 @@
 	animal3D SDK: Minimal 3D Animation Framework
 	By Daniel S. Buckstein
 	
-	passTexcoord_transform_instanced_vs4x.glsl
-	Calculate final position and pass atlas texture coordinate.
+	passthru_stereo_gs4x.glsl
+	Duplicate triangle to be drawn in stereo.
 */
 
 #version 450
 
-#define MAX_INSTANCES 256
+#define MAX_VERTICES 6
 
-layout (location = 0)	in vec4 aPosition;
-layout (location = 8)	in vec4 aTexcoord;
+layout (triangles) in;
 
-struct sTransformStack {
-	mat4 mMVP;
-	mat4 mAtlas;
-};
-uniform ubTransformStack {
-	sTransformStack uTransformStack[MAX_INSTANCES];
-};
+layout (triangle_strip, max_vertices = MAX_VERTICES) out;
+
+in vbVertexData {
+	vec4 vTexcoord_atlas;
+} vVertexData[];
 
 out vbVertexData {
 	vec4 vTexcoord_atlas;
 };
 
-flat out int vVertexID;
-flat out int vInstanceID;
+void copyVertexData(int i)
+{
+	vTexcoord_atlas = vVertexData[i].vTexcoord_atlas;
+}
+
+void drawMono()
+{
+	copyVertexData(0);
+	gl_Position = gl_in[0].gl_Position;
+	EmitVertex();
+
+	copyVertexData(1);
+	gl_Position = gl_in[1].gl_Position;
+	EmitVertex();
+	
+	copyVertexData(2);
+	gl_Position = gl_in[2].gl_Position;
+	EmitVertex();
+
+	EndPrimitive();
+}
+
+
+void drawStereo()
+{
+	
+}
+
 
 void main()
 {
-	// DUMMY OUTPUT: directly assign input position to output position
-//	gl_Position = aPosition;
-	
-	sTransformStack tstack = uTransformStack[gl_InstanceID];
-	vTexcoord_atlas = tstack.mAtlas * aTexcoord;
-	gl_Position = tstack.mMVP * aPosition;
-
-	vVertexID = gl_VertexID;
-	vInstanceID = gl_InstanceID;
+	drawMono();
+	//drawStereo();
 }

@@ -143,12 +143,12 @@ void a3rendering_init_scene(a3_DemoState const* demoState, a3_Scene_Rendering* s
         a3rendering_update_sceneGraph(scene, 0.0);
     }
 
-    // other
-    a3hullReset(&scene->test_hull);
-    a3rayReset(&scene->test_ray);
-    scene->test_ray_param = a3real_zero;
-    scene->test_ray_fired = a3false;
-    scene->test_ray_hit   = a3false;
+    //// other
+    //a3hullReset(&scene->test_hull);
+    //a3rayReset(&scene->test_ray);
+    //scene->test_ray_param = a3real_zero;
+    //scene->test_ray_fired = a3false;
+    //scene->test_ray_hit   = a3false;
 }
 
 
@@ -194,8 +194,8 @@ void a3rendering_load(a3_DemoState const* demoState, a3_Scene_Rendering* scene)
 	// we want the exact same view in either case
 	const a3real sceneCameraAxisPos = 20.0f;
 	const a3vec3 sceneCameraStartPos = {
-		+sceneCameraAxisPos + 10.0f,
-		-sceneCameraAxisPos - 20.0f,
+		+sceneCameraAxisPos, //+ 10.0f,
+		-sceneCameraAxisPos, //- 20.0f,
 		+sceneCameraAxisPos +  5.0f,
 	};
 	const a3vec3 sceneCameraStartEuler = {
@@ -268,8 +268,8 @@ void a3rendering_load(a3_DemoState const* demoState, a3_Scene_Rendering* scene)
 
 
 	// set flags
-	scene->render = rendering_renderRT;
-	scene->display = rendering_displayTexture;
+	scene->render = rendering_renderPhongStereo;
+	scene->display = rendering_displayStereo;
 	scene->activeCamera = rendering_cameraSceneViewer;
 
 	scene->pipeline = rendering_forward;

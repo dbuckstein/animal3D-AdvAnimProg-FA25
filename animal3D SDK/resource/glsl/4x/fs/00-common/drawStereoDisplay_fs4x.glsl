@@ -18,8 +18,8 @@
 	animal3D SDK: Minimal 3D Animation Framework
 	By Daniel S. Buckstein
 	
-	drawTexture_fs4x.glsl
-	Output texture blended with color.
+	drawStereoDisplay_fs4x.glsl
+	Output final stereoscopic display.
 */
 
 #version 450
@@ -28,17 +28,13 @@ in vbVertexData {
 	vec4 vTexcoord_atlas;
 };
 
-uniform vec4 uColor;
-
 uniform sampler2D uImage00;
 
 layout (location = 0) out vec4 rtFragColor;
 
 void main()
 {
-	// DUMMY OUTPUT: all fragments are OPAQUE YELLOW
-//	rtFragColor = vec4(1.0, 1.0, 0.0, 1.0);
-
+	// DUMMY OUTPUT: texture sample
 	vec4 col = texture(uImage00, vTexcoord_atlas.xy);
-	rtFragColor = col * uColor;
+	rtFragColor = col;
 }
