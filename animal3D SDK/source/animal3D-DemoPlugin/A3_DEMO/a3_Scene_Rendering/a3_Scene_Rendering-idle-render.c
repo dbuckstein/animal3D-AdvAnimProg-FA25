@@ -140,6 +140,23 @@ void a3demo_uploadTransformStacks(
     a3_SceneModelMatrixStack const* model_matrix_stacks, a3_SceneViewerMatrixStack const* viewer_matrix_stacks,
     a3ui32 const max_models, a3ui32 const num_models, a3ui32 const max_viewers, a3ui32 const num_viewers);
 
+
+// setup multiple viewports
+static void a3scene_render_multi(a3_Framebuffer const* const framebuffer)
+{
+    // x, y, w, h
+    a3real const frameWidth   = (a3real)(framebuffer->frameWidth);
+    a3real const frameHeight  = (a3real)(framebuffer->frameHeight);
+    a3real const frameWidth_2 = (a3real)(framebuffer->frameWidth / 2);
+    a3real const viewport[] = {
+        0, 0, frameWidth, frameHeight,
+        0, 0, frameWidth_2, frameHeight,
+        frameWidth_2, 0, frameWidth_2, frameHeight,
+    };
+    glViewportArrayv(0, 3, viewport);
+}
+
+
 // sub-routine for rendering the demo state using the shading pipeline
 void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const* scene, a3f64 const dt)
 {
@@ -365,6 +382,24 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 		-1.0f, -1.0f, -1.0f, 1.0f,
 	};
 
+    // post-view stereo matrix
+    const a3real d_interocular = 0.625f;//approx 6cm on 10cm scale
+    const a3real d_convergence = 100.0f;//approx 1m on 10cm scale
+    const a3real fi = 0.5f * d_interocular;
+    const a3real fc = fi / d_convergence;
+    const a3mat4 viewPostMat_l = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+         -fc, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+         +fi, 0.0f, 0.0f, 1.0f,
+    };
+    const a3mat4 viewPostMat_r = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+         +fc, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+         -fi, 0.0f, 0.0f, 1.0f,
+    };
+
 	// final model matrix and full matrix stack
 	a3mat4 projectionMat = activeCamera->projectionMat;
 	a3mat4 projectionMatInv = activeCamera->projectionMatInv;
@@ -408,6 +443,10 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 		a3scene_setSceneState(currentWriteFBO, demoState->displaySkybox);
 		break;
 	}
+    
+    // Setup stereo viewports
+    if (scene->render == rendering_renderPhongStereo)
+        a3scene_render_multi(currentWriteFBO);
 
 
 	// optional stencil test before drawing objects
@@ -429,6 +468,8 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 	a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uP_inv, 1, projectionMatInv.mm);
 	a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uPB, 1, projectionBiasMat.mm);
 	a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uPB_inv, 1, projectionBiasMat_inv.mm);
+    a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uV_post, 1, viewPostMat_l.mm);
+    a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uV_post_inv, 1, viewPostMat_r.mm);
 	a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uAtlas, 1, a3mat4_identity.mm);
 	a3shaderUniformSendFloat(a3unif_vec4, currentDemoProgram->uColor, hueCount, rgba4->v);
     if (demoState->updateAnimation)
@@ -631,11 +672,29 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 	currentWriteFBO = writeFBO[currentPass];
 	a3framebufferActivate(currentWriteFBO);
 
+    // Setup viewports and skybox
+    if (!demoState->displaySkybox)
+    {
+        currentDemoProgram = demoState->prog_drawColorUnif;
+    }
+    else if (scene->render == rendering_renderPhongStereo)
+    {
+        a3scene_render_multi(currentWriteFBO);
+        currentDemoProgram = demoState->prog_drawTextureStereo;
+    }
+    else
+    {
+        currentDemoProgram = demoState->prog_drawTexture;
+    }
+
 	// composite skybox
-	currentDemoProgram = demoState->displaySkybox ? demoState->prog_drawTexture : demoState->prog_drawColorUnif;
 	modelMat = scene->sceneGraphState->objectSpace->hpose_base[scene->obj_skybox->sceneGraphIndex].transformMat;
 	a3scene_drawModelTexturedColored_invertModel(modelViewProjectionMat.m, viewProjectionMat.m, modelMat.m, a3mat4_identity.m, currentDemoProgram, demoState->draw_unit_box, demoState->tex_skybox_clouds, a3vec4_one.v);
 	a3scene_enableCompositeBlending();
+
+    // reset viewport
+    if (demoState->displaySkybox && (scene->render == rendering_renderPhongStereo))
+        a3framebufferActivate(currentWriteFBO);
 
 	// draw textured quad with previous pass image on it
 	// repeat as necessary to complete composite
@@ -721,13 +780,23 @@ void a3rendering_render(a3_DemoState const* demoState, a3_Scene_Rendering const*
 		{
 			// most basic option: simply display texture
 		case rendering_displayTexture:
-			break;
+            a3shaderUniformSendFloat(a3unif_vec4, currentDemoProgram->uColor, 1, a3vec4_one.v);
+            break;
+
+            // stereo display: display texture with transformation
+        case rendering_displayStereo: {
+            // send target dimensions
+            pixelSizeAndInv.x = (a3f32)currentDisplayFBO->frameWidth;
+            pixelSizeAndInv.y = (a3f32)currentDisplayFBO->frameHeight;
+            pixelSizeAndInv.z = 1.0f / pixelSizeAndInv.x;
+            pixelSizeAndInv.w = 1.0f / pixelSizeAndInv.y;
+            a3shaderUniformSendFloat(a3unif_vec4, currentDemoProgram->uAxis, 1, pixelSizeAndInv.v);
+        }   break;
 		}
 
 		// done
 		a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uMVP, 1, fsq.mm);
 		a3shaderUniformSendFloatMat(a3unif_mat4, 0, currentDemoProgram->uAtlas, 1, a3mat4_identity.mm);
-		a3shaderUniformSendFloat(a3unif_vec4, currentDemoProgram->uColor, 1, a3vec4_one.v);
 		a3vertexDrawableRenderActive();
 	}
 

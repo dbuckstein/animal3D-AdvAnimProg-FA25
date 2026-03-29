@@ -60,11 +60,25 @@ void drawMono()
 	EndPrimitive();
 }
 
-
+// ****TO-DO: 
+//	-> implement method called 'drawStereo' and invoke it in 'main' below: 
+//		-> the goal of this shader is simple: duplicate to different viewports
+//		-> do not add uniforms or perform any other special operations
+//		-> refer to the OpenGL and GLSL specifications: 
+//		https://www.khronos.org/registry/OpenGL/specs/gl/glspec46.core.pdf
+//			11.3.4.6 "Layer and Viewport Selection"
+//		https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.pdf 
+//			7.1.4 "Geometry Shader Special Variables"
+//
+// | YOUR CODE HERE |
+// V                V
+//-----------------------------------------------------------------------------
 void drawStereo()
 {
 	
 }
+//-----------------------------------------------------------------------------
+// ^ YOUR CODE HERE ^
 
 
 void main()
