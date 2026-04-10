@@ -92,23 +92,32 @@ void drawStereo()
 	//    Compute projection matrix
 	//    For each vertex in single triangle: 
 	//      Copy output data
+	//      Offset output view position (BONUS STEP)
 	//      Compute clip-space (new proj * input view)
 	//      Emit vertex
 	//    End primitive
+	// BONUS: Since Phong depends on the view-space position, and this is 
+	// modified by the stereo transform, need to update the geometry's view 
+	// position for lighting to be correct. This shift is the "x translation" 
+	// component of the stereo transformation matrix; simply add it to the 
+	// output view position. Subtle difference but improves realism.
 	mat4 P;
 
 	gl_ViewportIndex = 1;
 	P = uP * uV_post;
 
 	copyVertexData(0);
+	vTangentBasis_view[3][0] += uV_post[3][0];
 	gl_Position = P * vVertexData[0].vTangentBasis_view[3];
 	EmitVertex();
 
 	copyVertexData(1);
+	vTangentBasis_view[3][0] += uV_post[3][0];
 	gl_Position = P * vVertexData[1].vTangentBasis_view[3];
 	EmitVertex();
 	
 	copyVertexData(2);
+	vTangentBasis_view[3][0] += uV_post[3][0];
 	gl_Position = P * vVertexData[2].vTangentBasis_view[3];
 	EmitVertex();
 
@@ -118,14 +127,17 @@ void drawStereo()
 	P = uP * uV_post_inv;
 
 	copyVertexData(0);
+	vTangentBasis_view[3][0] += uV_post_inv[3][0];
 	gl_Position = P * vVertexData[0].vTangentBasis_view[3];
 	EmitVertex();
 
 	copyVertexData(1);
+	vTangentBasis_view[3][0] += uV_post_inv[3][0];
 	gl_Position = P * vVertexData[1].vTangentBasis_view[3];
 	EmitVertex();
 	
 	copyVertexData(2);
+	vTangentBasis_view[3][0] += uV_post_inv[3][0];
 	gl_Position = P * vVertexData[2].vTangentBasis_view[3];
 	EmitVertex();
 
