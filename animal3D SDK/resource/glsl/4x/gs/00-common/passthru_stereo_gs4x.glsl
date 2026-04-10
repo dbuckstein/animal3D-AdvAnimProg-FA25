@@ -77,11 +77,59 @@ void drawMono()
 // | YOUR CODE HERE |
 // V                V
 //-----------------------------------------------------------------------------
-
+uniform mat4 uP;
+uniform mat4 uV_post;    // L
+uniform mat4 uV_post_inv;// R
 
 void drawStereo()
 {
+	// "Post-view" represents transform after "view" but before "proj".
+	// Passed in from render routine; construct complete projection matrix
+	// by combining post-view stereo transform with original mono projection.
+	// Algorithm: 
+	//  For each eye: 
+	//	  Select viewport
+	//    Compute projection matrix
+	//    For each vertex in single triangle: 
+	//      Copy output data
+	//      Compute clip-space (new proj * input view)
+	//      Emit vertex
+	//    End primitive
+	mat4 P;
+
+	gl_ViewportIndex = 1;
+	P = uP * uV_post;
+
+	copyVertexData(0);
+	gl_Position = P * vVertexData[0].vTangentBasis_view[3];
+	EmitVertex();
+
+	copyVertexData(1);
+	gl_Position = P * vVertexData[1].vTangentBasis_view[3];
+	EmitVertex();
 	
+	copyVertexData(2);
+	gl_Position = P * vVertexData[2].vTangentBasis_view[3];
+	EmitVertex();
+
+	EndPrimitive();
+	
+	gl_ViewportIndex = 2;
+	P = uP * uV_post_inv;
+
+	copyVertexData(0);
+	gl_Position = P * vVertexData[0].vTangentBasis_view[3];
+	EmitVertex();
+
+	copyVertexData(1);
+	gl_Position = P * vVertexData[1].vTangentBasis_view[3];
+	EmitVertex();
+	
+	copyVertexData(2);
+	gl_Position = P * vVertexData[2].vTangentBasis_view[3];
+	EmitVertex();
+
+	EndPrimitive();
 }
 //-----------------------------------------------------------------------------
 // ^ YOUR CODE HERE ^
@@ -89,6 +137,6 @@ void drawStereo()
 
 void main()
 {
-	drawMono();
-	//drawStereo();
+	//drawMono();
+	drawStereo();
 }
