@@ -75,7 +75,13 @@ void drawMono()
 //-----------------------------------------------------------------------------
 void drawStereo()
 {
-	
+	// gl_ViewportIndex: only GS can do this!
+	// Multiple viewports are set up in render routine.
+	// Assign the ones that represent each half of the target.
+	gl_ViewportIndex = 1;
+	drawMono();
+	gl_ViewportIndex = 2;
+	drawMono();
 }
 //-----------------------------------------------------------------------------
 // ^ YOUR CODE HERE ^
@@ -83,6 +89,6 @@ void drawStereo()
 
 void main()
 {
-	drawMono();
-	//drawStereo();
+	//drawMono();
+	drawStereo();
 }
